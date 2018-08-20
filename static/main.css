@@ -1,0 +1,13 @@
+/* This makes our tables a bit prettier */
+table {
+  border-collapse:collapse;
+  width:90%;
+  overflow-x:auto;
+}
+thead {
+  text-align:left;
+}
+table td, table th {
+  border-bottom: 1px solid black;
+  padding:5px;
+}

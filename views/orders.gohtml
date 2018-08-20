@@ -1,0 +1,44 @@
+{{ define "yield" }}
+<h2>List of current orders</h2>
+<table>
+  <thead>
+    <th>Name</th>
+    <th>Phone</th>
+    <th>Items</th>
+    <th>Status</th>
+    <th>Action</th>
+  </thead>
+<tbody>
+  {{ range .}}
+  <tr>
+    <td>{{ .Name }}</td>
+    <td>{{ .Phone }}</td>
+    <td>
+      <ul>
+      {{ range .Items }}
+      <li>{{ . }}</li>
+      {{ end }}
+      </ul>
+    <td>{{ .Status }}</td>
+    <td>
+      <form action="/" method="post">
+      <label for="orderStatus">Select order status:</label>
+      <select name="orderStatus">
+      <option value="" selected="selected">--Order status--</option>
+      <option value="{{.ID}}_pending">Pending</option>
+      <option value="{{.ID}}_delayed">Delayed</option>
+      <option value="{{.ID}}_confirmed">Confirmed</option>
+      <option value="{{.ID}}_delivered">Delivered</option>
+      </select>
+      <button type="submit">Update</button>
+      </form>
+      <form action="/notifyCustomer" method="post">
+      <button type="submit" name="sendMessageTo" value="{{.ID}}">Notify Customer</button>
+      </form>
+    </td>
+  </tr>
+  {{ end }}
+</tbody>
+</table>
+{{ end }}
+

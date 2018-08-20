@@ -1,0 +1,391 @@
+<h1 id="sms-order-notifications">SMS Order Notifications</h1>
+<h3 id="min-build-time">⏱ 15 min build time</h3>
+<h2 id="why-build-sms-order-notifications">Why build SMS order notifications?</h2>
+<p>Have you ever ordered home delivery to find yourself wondering whether your order was received correctly and how long it’ll take to arrive? Some experiences are seamless and others… not so much.</p>
+<p>For on-demand industries such as food delivery, ridesharing and logistics, excellent customer service during the ordering process is essential. One easy way to stand out from the crowd is providing proactive communication to keep your customers in the loop about the status of their orders. Irresepective of whether your customer is waiting for a package delivery or growing “hangry” (i.e. Hungry + Angry) awaiting their food delivery, sending timely SMS order notifications is a great strategy to create a seamless user experience.</p>
+<p>The <a href="https://developers.messagebird.com/docs/sms-messaging">MessageBird SMS Messaging API</a> provides an easy way to fully automate and integrate a notifications application into your order handling software. Busy employees can trigger the notifications application with the push of a single button - no more confused <em>hangry</em> customers and a best-in-class user experience, just like that!</p>
+<h2 id="about-our-application">About our application</h2>
+<p>In this MessageBird Developer Guide, we’ll show you how to build a runnable Order Notifications application in Go. The application is a prototype order management system deployed by our fictitious food delivery company, <em>Birdie NomNom Foods</em>.</p>
+<p>Birdie NomNom Foods have set up the following workflow:</p>
+<ul>
+<li>New incoming orders are in a <em>pending</em> state.</li>
+<li>Once the kitchen starts preparing an order, it moves to the <em>confirmed</em> state. A message is sent to the customer to inform them about this.</li>
+<li>When the food is made and handed over to the delivery driver, staff marks the order <em>delivered</em>. A message is sent to the customer to let them know it will arrive momentarily.</li>
+<li>If preparation takes longer than expected, it can be moved to a <em>delayed</em> state. A message is sent to the customer asking them to hang on just a little while longer. Thanks to this, Birdie NomNom Foods saves time spent answering <em>“Where’s my order?”</em> calls.</li>
+</ul>
+<p><strong>Pro-tip:</strong> Follow this tutorial to build the whole application from scratch or, if you want to see it in action right away, you can download, clone or fork the sample application from the <a href="https://github.com/messagebirdguides/notifications-guide">MessageBird Developer Guides GitHub repository</a>.</p>
+<h2 id="getting-started">Getting started</h2>
+<p>We’ll be building our single-page web application with:</p>
+<ul>
+<li>the latest version of <a href="https://golang.org">Go</a>, and</li>
+<li>the <a href="https://github.com/messagebird/go-rest-api">MessageBird’s REST API package for Go</a></li>
+</ul>
+<p><strong>Let’s get started!</strong></p>
+<h3 id="structure-of-your-application">Structure of your application</h3>
+<p>We’ll need the following components for our application to be viable:</p>
+<ul>
+<li><strong>A data source</strong>: This should be a database or a REST endpoint containing information about our customers and their orders. For this guide, we’ll be mocking up data already imported from an external data source.</li>
+<li><strong>A web interface to manage orders</strong>: The web interface will display information on customer orders, and allow us to change the order status and send SMS messages to customers.</li>
+<li><strong>Route handler that contains message sending logic</strong>: This handler would contain logic that:
+<ol type="1">
+<li>Checks our order against the orders database.</li>
+<li>Populates and makes a <code>NewMessage()</code> request with the appropriate information.</li>
+</ol></li>
+</ul>
+<h3 id="project-setup">Project Setup</h3>
+<p>Create a folder for your application. In this folder, create the following subfolders:</p>
+<ul>
+<li><code>views</code></li>
+<li><code>views/layouts</code></li>
+</ul>
+<p>Because we’re dealing with data that we’d like to display as tables, we want to be able to serve CSS to make our tables readable. Create a “static” subfolder to contain our CSS and future static assets:</p>
+<ul>
+<li><code>static</code></li>
+</ul>
+<p>We’ll use the following packages from the Go standard library to build our routes and views:</p>
+<ul>
+<li><code>net/http</code>: A HTTP package for building our routes and a simple http server.</li>
+<li><code>html/template</code>: A HTML template library for building views.</li>
+</ul>
+<h3 id="create-your-api-key">Create your API Key 🔑</h3>
+<p>To start making API calls, we need to generate an access key. MessageBird provides keys in <em>live</em> and <em>test</em> modes. For this tutorial you will need to use a live key. Otherwise, you will not be able to test the complete flow. Read more about the difference between test and live API keys <a href="https://support.messagebird.com/hc/en-us/articles/360000670709-What-is-the-difference-between-a-live-key-and-a-test-key-">here</a>.</p>
+<p>Go to the <a href="https://dashboard.messagebird.com/en/user/index">MessageBird Dashboard</a>; if you have already created an API key it will be shown right there. Click on the eye icon to make the access key visible, then select and copy it to your clipboard. If you do not see any key on the dashboard or if you’re unsure whether this key is in <em>live</em> mode, go to the <em>Developers</em> section and open the <a href="https://dashboard.messagebird.com/en/developers/access">API access (REST) tab</a>. Here, you can create new keys and manage your existing ones.</p>
+<p>If you are having any issues creating your API key, please don’t hesitate to contact support at support@messagebird.com.</p>
+<p><strong>Pro-tip:</strong> To keep our demonstration code simple, we will be saving our API key in <code>main.go</code>. However, hardcoding your credentials in the code is a risky practice that should never be used in production applications. A better method, also recommended by the <a href="https://12factor.net/">Twelve-Factor App Definition</a>, is to use environment variables. You can use open source packages such as <a href="https://github.com/joho/godotenv">GoDotEnv</a> to read your API key from a <code>.env</code> file into your Go application. Your <code>.env</code> file should be written as follows:</p>
+<pre class="env"><code>MESSAGEBIRD_API_KEY=YOUR-API-KEY</code></pre>
+<p>To use <a href="https://github.com/joho/godotenv">GoDotEnv</a> in your application, install it by running:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode bash"><code class="sourceCode bash"><a class="sourceLine" id="cb2-1" data-line-number="1"><span class="ex">go</span> get -u github.com/joho/godotenv</a></code></pre></div>
+<p>Then, import it in your application:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode go"><code class="sourceCode go"><a class="sourceLine" id="cb3-1" data-line-number="1"><span class="kw">import</span> (</a>
+<a class="sourceLine" id="cb3-2" data-line-number="2">  <span class="co">// Other imported packages</span></a>
+<a class="sourceLine" id="cb3-3" data-line-number="3">  <span class="st">&quot;os&quot;</span></a>
+<a class="sourceLine" id="cb3-4" data-line-number="4"></a>
+<a class="sourceLine" id="cb3-5" data-line-number="5">  <span class="st">&quot;github.com/joho/godotenv&quot;</span></a>
+<a class="sourceLine" id="cb3-6" data-line-number="6">)</a>
+<a class="sourceLine" id="cb3-7" data-line-number="7"></a>
+<a class="sourceLine" id="cb3-8" data-line-number="8"><span class="kw">func</span> main(){</a>
+<a class="sourceLine" id="cb3-9" data-line-number="9">  <span class="co">// GoDotEnv loads any &quot;.env&quot; file located in the same directory as main.go</span></a>
+<a class="sourceLine" id="cb3-10" data-line-number="10">  err := godotenv.Load()</a>
+<a class="sourceLine" id="cb3-11" data-line-number="11">  <span class="kw">if</span> err != <span class="ot">nil</span> {</a>
+<a class="sourceLine" id="cb3-12" data-line-number="12">    log.Fatal(<span class="st">&quot;Error loading .env file&quot;</span>)</a>
+<a class="sourceLine" id="cb3-13" data-line-number="13">  }</a>
+<a class="sourceLine" id="cb3-14" data-line-number="14"></a>
+<a class="sourceLine" id="cb3-15" data-line-number="15">  <span class="co">// Store the value for the key &quot;MESSAGEBIRD_API_KEY&quot; in the loaded &#39;.env&#39; file.</span></a>
+<a class="sourceLine" id="cb3-16" data-line-number="16">  apikey := os.Getenv(<span class="st">&quot;MESSAGEBIRD_API_KEY&quot;</span>)</a>
+<a class="sourceLine" id="cb3-17" data-line-number="17"></a>
+<a class="sourceLine" id="cb3-18" data-line-number="18">  <span class="co">// The rest of your application ...</span></a>
+<a class="sourceLine" id="cb3-19" data-line-number="19">}</a></code></pre></div>
+<h2 id="initialize-the-messagebird-client">Initialize the MessageBird Client</h2>
+<p>Install the <a href="https://github.com/messagebird/go-rest-api">MessageBird’s REST API package for Go</a> by running:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode go"><code class="sourceCode go"><a class="sourceLine" id="cb4-1" data-line-number="1"><span class="kw">go</span> get -u github.com/messagebird/<span class="kw">go</span>-rest-api</a></code></pre></div>
+<p>In your project folder, create a <code>main.go</code> file, and write the following code:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode go"><code class="sourceCode go"><a class="sourceLine" id="cb5-1" data-line-number="1"><span class="kw">package</span> main</a>
+<a class="sourceLine" id="cb5-2" data-line-number="2"></a>
+<a class="sourceLine" id="cb5-3" data-line-number="3"><span class="kw">import</span> (</a>
+<a class="sourceLine" id="cb5-4" data-line-number="4">  <span class="st">&quot;github.com/messagebird/go-rest-api&quot;</span></a>
+<a class="sourceLine" id="cb5-5" data-line-number="5">)</a>
+<a class="sourceLine" id="cb5-6" data-line-number="6"></a>
+<a class="sourceLine" id="cb5-7" data-line-number="7"><span class="co">// Client ...</span></a>
+<a class="sourceLine" id="cb5-8" data-line-number="8"><span class="co">// We&#39;re initializing &quot;Client&quot; as a global variable so that we can access its methods in our handlers.</span></a>
+<a class="sourceLine" id="cb5-9" data-line-number="9"><span class="kw">var</span> Client *messagebird.Client</a>
+<a class="sourceLine" id="cb5-10" data-line-number="10"></a>
+<a class="sourceLine" id="cb5-11" data-line-number="11"><span class="kw">func</span> main(){</a>
+<a class="sourceLine" id="cb5-12" data-line-number="12">  Client = messagebird.New(&lt;enter-your-apikey&gt;)</a>
+<a class="sourceLine" id="cb5-13" data-line-number="13">}</a></code></pre></div>
+<h2 id="setting-up-your-data-source">Setting up your data source</h2>
+<p>To keep this guide simple, we’ll be using a placeholder data source instead of an actual remote data source.</p>
+<p>Just above <code>main()</code>, add the following code:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode go"><code class="sourceCode go"><a class="sourceLine" id="cb6-1" data-line-number="1"><span class="co">// CurrentOrders contains a list of Orders.</span></a>
+<a class="sourceLine" id="cb6-2" data-line-number="2"><span class="co">// This is defined globally so that HTTP handlers can access them easily.</span></a>
+<a class="sourceLine" id="cb6-3" data-line-number="3"><span class="kw">var</span> CurrentOrders []Order</a></code></pre></div>
+<p>Then, add the following code after the body of <code>main()</code>:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode go"><code class="sourceCode go"><a class="sourceLine" id="cb7-1" data-line-number="1"><span class="co">// Order structures our individual orders.</span></a>
+<a class="sourceLine" id="cb7-2" data-line-number="2"><span class="kw">type</span> Order <span class="kw">struct</span>{</a>
+<a class="sourceLine" id="cb7-3" data-line-number="3">    ID    <span class="dt">string</span></a>
+<a class="sourceLine" id="cb7-4" data-line-number="4">    Name  <span class="dt">string</span></a>
+<a class="sourceLine" id="cb7-5" data-line-number="5">    Phone <span class="dt">string</span></a>
+<a class="sourceLine" id="cb7-6" data-line-number="6">    Items []<span class="dt">string</span></a>
+<a class="sourceLine" id="cb7-7" data-line-number="7">    <span class="co">// Possible values for Status:</span></a>
+<a class="sourceLine" id="cb7-8" data-line-number="8">    <span class="co">// &quot;pending&quot;, &quot;delayed&quot;, &quot;confirmed&quot;, &quot;delivered&quot;</span></a>
+<a class="sourceLine" id="cb7-9" data-line-number="9">    Status <span class="dt">string</span></a>
+<a class="sourceLine" id="cb7-10" data-line-number="10">}</a>
+<a class="sourceLine" id="cb7-11" data-line-number="11"></a>
+<a class="sourceLine" id="cb7-12" data-line-number="12"><span class="kw">func</span> initDB() {</a>
+<a class="sourceLine" id="cb7-13" data-line-number="13">    CurrentOrders = []Order{</a>
+<a class="sourceLine" id="cb7-14" data-line-number="14">        {<span class="st">&quot;c2972b5b4eef349fb1e5cc3e3150a2b6&quot;</span>, <span class="st">&quot;Hannah Hungry&quot;</span>, <span class="st">&quot;+319876543210&quot;</span>, []<span class="dt">string</span>{<span class="st">&quot;1 x Hipster Burger&quot;</span>, <span class="st">&quot;Fries&quot;</span>}, <span class="st">&quot;pending&quot;</span>},</a>
+<a class="sourceLine" id="cb7-15" data-line-number="15">        {<span class="st">&quot;1b992e39dc55f0c79dbe613b3ad02f29&quot;</span>, <span class="st">&quot;Mike Madeater&quot;</span>, <span class="st">&quot;+319876543211&quot;</span>, []<span class="dt">string</span>{<span class="st">&quot;1 x Chef Special Mozzarella Pizza&quot;</span>}, <span class="st">&quot;delayed&quot;</span>},</a>
+<a class="sourceLine" id="cb7-16" data-line-number="16">        {<span class="st">&quot;81dc9bdb52d04dc20036dbd8313ed055&quot;</span>, <span class="st">&quot;Don Cheetos&quot;</span>, <span class="st">&quot;+319876543212&quot;</span>, []<span class="dt">string</span>{<span class="st">&quot;1 x Awesome Cheese Platter&quot;</span>}, <span class="st">&quot;confirmed&quot;</span>},</a>
+<a class="sourceLine" id="cb7-17" data-line-number="17">        {<span class="st">&quot;81dc9bdb52d04dc20036dbd8313ed055&quot;</span>, <span class="st">&quot;Ace Adventures&quot;</span>, <span class="st">&quot;+319876543213&quot;</span>, []<span class="dt">string</span>{<span class="st">&quot;1 x Variegated Salami Combo Box&quot;</span>}, <span class="st">&quot;delivered&quot;</span>},</a>
+<a class="sourceLine" id="cb7-18" data-line-number="18">    }</a>
+<a class="sourceLine" id="cb7-19" data-line-number="19">}</a></code></pre></div>
+<p>Here, we’ve created a placeholder database in the form of a list of orders, each containing an “ID”, “Name”, “Phone”, “Items”, and “Status” field.</p>
+<h2 id="dealing-with-our-routes">Dealing with our routes</h2>
+<p>Next, we’ll define our routes so that we can quickly test if the customer information we’re getting from our data source can be displayed correctly.</p>
+<h3 id="define-routes">Define routes</h3>
+<p>We want three routes:</p>
+<ul>
+<li>First route displays and updates all current orders and their statuses.</li>
+<li>Second route sends notifications to the respective customer for each order.</li>
+<li>Third route is for serving our CSS files, and any other static assets we may eventually need.</li>
+</ul>
+<p>Modify <code>main.go</code> to look like the following:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode go"><code class="sourceCode go"><a class="sourceLine" id="cb8-1" data-line-number="1"><span class="kw">func</span> main() {</a>
+<a class="sourceLine" id="cb8-2" data-line-number="2">    initDB()</a>
+<a class="sourceLine" id="cb8-3" data-line-number="3">    Client = messagebird.NewV2(&lt;enter-your-api-key&gt;)</a>
+<a class="sourceLine" id="cb8-4" data-line-number="4"></a>
+<a class="sourceLine" id="cb8-5" data-line-number="5">    <span class="co">// Routes</span></a>
+<a class="sourceLine" id="cb8-6" data-line-number="6">    http.HandleFunc(<span class="st">&quot;/&quot;</span>, orderPage)</a>
+<a class="sourceLine" id="cb8-7" data-line-number="7">    http.HandleFunc(<span class="st">&quot;/notifyCustomer&quot;</span>, orderNotify)</a>
+<a class="sourceLine" id="cb8-8" data-line-number="8"></a>
+<a class="sourceLine" id="cb8-9" data-line-number="9">    <span class="co">// Define route for static resources</span></a>
+<a class="sourceLine" id="cb8-10" data-line-number="10">    staticDir := http.FileServer(http.Dir(<span class="st">&quot;static&quot;</span>))</a>
+<a class="sourceLine" id="cb8-11" data-line-number="11">    http.Handle(<span class="st">&quot;/static/&quot;</span>, http.StripPrefix(<span class="st">&quot;/static/&quot;</span>, staticDir))</a>
+<a class="sourceLine" id="cb8-12" data-line-number="12"></a>
+<a class="sourceLine" id="cb8-13" data-line-number="13">    <span class="co">// Serve</span></a>
+<a class="sourceLine" id="cb8-14" data-line-number="14">    port := <span class="st">&quot;:8080&quot;</span></a>
+<a class="sourceLine" id="cb8-15" data-line-number="15">    log.Println(<span class="st">&quot;Serving application on&quot;</span>, port)</a>
+<a class="sourceLine" id="cb8-16" data-line-number="16">    err := http.ListenAndServe(port, <span class="ot">nil</span>)</a>
+<a class="sourceLine" id="cb8-17" data-line-number="17">    <span class="kw">if</span> err != <span class="ot">nil</span> {</a>
+<a class="sourceLine" id="cb8-18" data-line-number="18">        log.Println(err)</a>
+<a class="sourceLine" id="cb8-19" data-line-number="19">    }</a>
+<a class="sourceLine" id="cb8-20" data-line-number="20">}</a></code></pre></div>
+<h3 id="writing-our-templates">Writing our templates</h3>
+<p>We’re going to write two templates:</p>
+<ul>
+<li><code>views/layouts/default.gohtml</code>: This is our base template, and is useful when you need to expand your project quickly.</li>
+<li><code>views/orders.gohtml</code>: This is the template that displays our orders and actions available for each order.</li>
+</ul>
+<h4 id="default.gohtml"><code>default.gohtml</code></h4>
+<p>For <code>default.gohtml</code>, write the following code:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode html"><code class="sourceCode html"><a class="sourceLine" id="cb9-1" data-line-number="1">{{ define &quot;default&quot; }}</a>
+<a class="sourceLine" id="cb9-2" data-line-number="2"><span class="dt">&lt;!DOCTYPE </span>html<span class="dt">&gt;</span></a>
+<a class="sourceLine" id="cb9-3" data-line-number="3">  <span class="kw">&lt;head&gt;</span></a>
+<a class="sourceLine" id="cb9-4" data-line-number="4">    <span class="kw">&lt;meta</span><span class="ot"> charset=</span><span class="st">&quot;utf-8&quot;</span><span class="kw">&gt;</span></a>
+<a class="sourceLine" id="cb9-5" data-line-number="5">    <span class="kw">&lt;meta</span><span class="ot"> http-equiv=</span><span class="st">&quot;X-UA-Compatible&quot;</span><span class="ot"> content=</span><span class="st">&quot;IE=edge&quot;</span><span class="kw">&gt;</span></a>
+<a class="sourceLine" id="cb9-6" data-line-number="6">    <span class="kw">&lt;title&gt;</span>MessageBird Verify Example<span class="kw">&lt;/title&gt;</span></a>
+<a class="sourceLine" id="cb9-7" data-line-number="7">    <span class="kw">&lt;meta</span><span class="ot"> name=</span><span class="st">&quot;description&quot;</span><span class="ot"> content=</span><span class="st">&quot;&quot;</span><span class="kw">&gt;</span></a>
+<a class="sourceLine" id="cb9-8" data-line-number="8">    <span class="kw">&lt;meta</span><span class="ot"> name=</span><span class="st">&quot;viewport&quot;</span><span class="ot"> content=</span><span class="st">&quot;width=device-width, initial-scale=1&quot;</span><span class="kw">&gt;</span></a>
+<a class="sourceLine" id="cb9-9" data-line-number="9">    <span class="kw">&lt;link</span><span class="ot"> rel=</span><span class="st">&quot;stylesheet&quot;</span><span class="ot"> href=</span><span class="st">&quot;/static/main.css&quot;</span><span class="ot"> type=</span><span class="st">&quot;text/css&quot;</span><span class="kw">/&gt;</span></a>
+<a class="sourceLine" id="cb9-10" data-line-number="10">  <span class="kw">&lt;/head&gt;</span></a>
+<a class="sourceLine" id="cb9-11" data-line-number="11">  <span class="kw">&lt;body&gt;</span></a>
+<a class="sourceLine" id="cb9-12" data-line-number="12">    <span class="kw">&lt;main&gt;</span></a>
+<a class="sourceLine" id="cb9-13" data-line-number="13">    <span class="kw">&lt;h1&gt;</span>MessageBird Notification Example<span class="kw">&lt;/h1&gt;</span></a>
+<a class="sourceLine" id="cb9-14" data-line-number="14">    {{ template &quot;yield&quot; . }}</a>
+<a class="sourceLine" id="cb9-15" data-line-number="15">    <span class="kw">&lt;/main&gt;</span></a>
+<a class="sourceLine" id="cb9-16" data-line-number="16">  <span class="kw">&lt;/body&gt;</span></a>
+<a class="sourceLine" id="cb9-17" data-line-number="17"><span class="kw">&lt;/html&gt;</span></a>
+<a class="sourceLine" id="cb9-18" data-line-number="18">{{ end }}</a></code></pre></div>
+<p>Notice that we’ve defined a stylesheet resource at <code>/static/main.css</code>. Let’s create that stylesheet now. Make a <code>main.css</code> file in your <code>static</code> subfolder, and write in it the following CSS:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode css"><code class="sourceCode css"><a class="sourceLine" id="cb10-1" data-line-number="1"><span class="co">/* This makes our tables a bit prettier */</span></a>
+<a class="sourceLine" id="cb10-2" data-line-number="2">table {</a>
+<a class="sourceLine" id="cb10-3" data-line-number="3">  <span class="kw">border-collapse</span>:<span class="dv">collapse</span>;</a>
+<a class="sourceLine" id="cb10-4" data-line-number="4">  <span class="kw">width</span>:<span class="dv">90%</span>;</a>
+<a class="sourceLine" id="cb10-5" data-line-number="5">  <span class="kw">overflow-x</span>:<span class="dv">auto</span>;</a>
+<a class="sourceLine" id="cb10-6" data-line-number="6">}</a>
+<a class="sourceLine" id="cb10-7" data-line-number="7">thead {</a>
+<a class="sourceLine" id="cb10-8" data-line-number="8">  <span class="kw">text-align</span>:<span class="dv">left</span>;</a>
+<a class="sourceLine" id="cb10-9" data-line-number="9">}</a>
+<a class="sourceLine" id="cb10-10" data-line-number="10">table td, table th {</a>
+<a class="sourceLine" id="cb10-11" data-line-number="11">  <span class="kw">border-bottom</span>: <span class="dv">1px</span> <span class="dv">solid</span> <span class="dv">black</span>;</a>
+<a class="sourceLine" id="cb10-12" data-line-number="12">  <span class="kw">padding</span>:<span class="dv">5px</span>;</a>
+<a class="sourceLine" id="cb10-13" data-line-number="13">}</a></code></pre></div>
+<h4 id="orders.gohtml"><code>orders.gohtml</code></h4>
+<p><code>orders.gohtml</code> is more complicated. Let’s start out with a basic template:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode html"><code class="sourceCode html"><a class="sourceLine" id="cb11-1" data-line-number="1">{{ define &quot;yield&quot; }}</a>
+<a class="sourceLine" id="cb11-2" data-line-number="2">{{ . }}</a>
+<a class="sourceLine" id="cb11-3" data-line-number="3">{{ end }}</a></code></pre></div>
+<p>We know the shape of our data: we’re looking at a list of structs of type “Order”. Each order has a “ID”, “Name”, “Phone”, “Items”, and “Status” field. We’re using the “ID” field to make sure that we’re addressing a unique order, but we don’t need to display it.</p>
+<p>To get to each individual field in each order, we can write our template in <code>orders.gohtml</code> as follows:</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode html"><code class="sourceCode html"><a class="sourceLine" id="cb12-1" data-line-number="1">{{ define &quot;yield&quot; }}</a>
+<a class="sourceLine" id="cb12-2" data-line-number="2"><span class="kw">&lt;h2&gt;</span>List of current orders<span class="kw">&lt;/h2&gt;</span></a>
+<a class="sourceLine" id="cb12-3" data-line-number="3"><span class="kw">&lt;table&gt;</span></a>
+<a class="sourceLine" id="cb12-4" data-line-number="4">    <span class="kw">&lt;thead&gt;</span></a>
+<a class="sourceLine" id="cb12-5" data-line-number="5">        <span class="kw">&lt;th&gt;</span>Name<span class="kw">&lt;/th&gt;</span></a>
+<a class="sourceLine" id="cb12-6" data-line-number="6">        <span class="kw">&lt;th&gt;</span>Phone<span class="kw">&lt;/th&gt;</span></a>
+<a class="sourceLine" id="cb12-7" data-line-number="7">        <span class="kw">&lt;th&gt;</span>Items<span class="kw">&lt;/th&gt;</span></a>
+<a class="sourceLine" id="cb12-8" data-line-number="8">        <span class="kw">&lt;th&gt;</span>Status<span class="kw">&lt;/th&gt;</span></a>
+<a class="sourceLine" id="cb12-9" data-line-number="9">        <span class="kw">&lt;th&gt;</span>Action<span class="kw">&lt;/th&gt;</span></a>
+<a class="sourceLine" id="cb12-10" data-line-number="10">    <span class="kw">&lt;/thead&gt;</span></a>
+<a class="sourceLine" id="cb12-11" data-line-number="11">    <span class="kw">&lt;tbody&gt;</span></a>
+<a class="sourceLine" id="cb12-12" data-line-number="12">        {{ range .}}</a>
+<a class="sourceLine" id="cb12-13" data-line-number="13">        <span class="kw">&lt;tr&gt;</span></a>
+<a class="sourceLine" id="cb12-14" data-line-number="14">            <span class="kw">&lt;td&gt;</span>{{ .Name }}<span class="kw">&lt;/td&gt;</span></a>
+<a class="sourceLine" id="cb12-15" data-line-number="15">            <span class="kw">&lt;td&gt;</span>{{ .Phone }}<span class="kw">&lt;/td&gt;</span></a>
+<a class="sourceLine" id="cb12-16" data-line-number="16">            <span class="kw">&lt;td&gt;</span></a>
+<a class="sourceLine" id="cb12-17" data-line-number="17">            <span class="kw">&lt;ul&gt;</span></a>
+<a class="sourceLine" id="cb12-18" data-line-number="18">            {{ range .Items }}</a>
+<a class="sourceLine" id="cb12-19" data-line-number="19">            <span class="kw">&lt;li&gt;</span>{{ . }}<span class="kw">&lt;/li&gt;</span></a>
+<a class="sourceLine" id="cb12-20" data-line-number="20">            {{ end }}</a>
+<a class="sourceLine" id="cb12-21" data-line-number="21">            <span class="kw">&lt;/ul&gt;</span></a>
+<a class="sourceLine" id="cb12-22" data-line-number="22">            <span class="kw">&lt;td&gt;</span>{{ .Status }}<span class="kw">&lt;/td&gt;</span></a>
+<a class="sourceLine" id="cb12-23" data-line-number="23">            <span class="kw">&lt;td&gt;</span></a>
+<a class="sourceLine" id="cb12-24" data-line-number="24">            <span class="kw">&lt;button&gt;</span>Actions<span class="kw">&lt;/button&gt;</span></a>
+<a class="sourceLine" id="cb12-25" data-line-number="25">            <span class="kw">&lt;/td&gt;</span></a>
+<a class="sourceLine" id="cb12-26" data-line-number="26">        <span class="kw">&lt;/tr&gt;</span></a>
+<a class="sourceLine" id="cb12-27" data-line-number="27">        {{ end }}</a>
+<a class="sourceLine" id="cb12-28" data-line-number="28">    <span class="kw">&lt;/tbody&gt;</span></a>
+<a class="sourceLine" id="cb12-29" data-line-number="29"><span class="kw">&lt;/table&gt;</span></a>
+<a class="sourceLine" id="cb12-30" data-line-number="30">{{ end }}</a></code></pre></div>
+<p><code>{{ range . }}</code> iterates through the list of structs in <code>CurrentOrders</code> that we’ll pass to the template when calling <code>ExecuteTemplate()</code>, and produces a table with our order information filled in.</p>
+<p>Finally, we need a way to make “POST” requests to our <code>/notifyCustomer</code> route from the <code>orders.gohtml</code> template. We need two <code>&lt;form&gt;</code> fields:</p>
+<ul>
+<li>One for updating the status of our orders</li>
+<li>Another for sending notifications to customers.</li>
+</ul>
+<p>Modify <code>orders.gohtml</code> to look like the following:</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode html"><code class="sourceCode html"><a class="sourceLine" id="cb13-1" data-line-number="1">{{ define &quot;yield&quot; }}</a>
+<a class="sourceLine" id="cb13-2" data-line-number="2"><span class="kw">&lt;h2&gt;</span>List of current orders<span class="kw">&lt;/h2&gt;</span></a>
+<a class="sourceLine" id="cb13-3" data-line-number="3"><span class="kw">&lt;table&gt;</span></a>
+<a class="sourceLine" id="cb13-4" data-line-number="4">  <span class="kw">&lt;thead&gt;</span></a>
+<a class="sourceLine" id="cb13-5" data-line-number="5">    <span class="kw">&lt;th&gt;</span>Name<span class="kw">&lt;/th&gt;</span></a>
+<a class="sourceLine" id="cb13-6" data-line-number="6">    <span class="kw">&lt;th&gt;</span>Phone<span class="kw">&lt;/th&gt;</span></a>
+<a class="sourceLine" id="cb13-7" data-line-number="7">    <span class="kw">&lt;th&gt;</span>Items<span class="kw">&lt;/th&gt;</span></a>
+<a class="sourceLine" id="cb13-8" data-line-number="8">    <span class="kw">&lt;th&gt;</span>Status<span class="kw">&lt;/th&gt;</span></a>
+<a class="sourceLine" id="cb13-9" data-line-number="9">    <span class="kw">&lt;th&gt;</span>Action<span class="kw">&lt;/th&gt;</span></a>
+<a class="sourceLine" id="cb13-10" data-line-number="10">  <span class="kw">&lt;/thead&gt;</span></a>
+<a class="sourceLine" id="cb13-11" data-line-number="11"><span class="kw">&lt;tbody&gt;</span></a>
+<a class="sourceLine" id="cb13-12" data-line-number="12">  {{ range .}}</a>
+<a class="sourceLine" id="cb13-13" data-line-number="13">  <span class="kw">&lt;tr&gt;</span></a>
+<a class="sourceLine" id="cb13-14" data-line-number="14">    <span class="kw">&lt;td&gt;</span>{{ .Name }}<span class="kw">&lt;/td&gt;</span></a>
+<a class="sourceLine" id="cb13-15" data-line-number="15">    <span class="kw">&lt;td&gt;</span>{{ .Phone }}<span class="kw">&lt;/td&gt;</span></a>
+<a class="sourceLine" id="cb13-16" data-line-number="16">    <span class="kw">&lt;td&gt;</span></a>
+<a class="sourceLine" id="cb13-17" data-line-number="17">      <span class="kw">&lt;ul&gt;</span></a>
+<a class="sourceLine" id="cb13-18" data-line-number="18">      {{ range .Items }}</a>
+<a class="sourceLine" id="cb13-19" data-line-number="19">      <span class="kw">&lt;li&gt;</span>{{ . }}<span class="kw">&lt;/li&gt;</span></a>
+<a class="sourceLine" id="cb13-20" data-line-number="20">      {{ end }}</a>
+<a class="sourceLine" id="cb13-21" data-line-number="21">      <span class="kw">&lt;/ul&gt;</span></a>
+<a class="sourceLine" id="cb13-22" data-line-number="22">    <span class="kw">&lt;td&gt;</span>{{ .Status }}<span class="kw">&lt;/td&gt;</span></a>
+<a class="sourceLine" id="cb13-23" data-line-number="23">    <span class="kw">&lt;td&gt;</span></a>
+<a class="sourceLine" id="cb13-24" data-line-number="24">      <span class="kw">&lt;form</span><span class="ot"> action=</span><span class="st">&quot;/&quot;</span><span class="ot"> method=</span><span class="st">&quot;post&quot;</span><span class="kw">&gt;</span></a>
+<a class="sourceLine" id="cb13-25" data-line-number="25">      <span class="kw">&lt;label</span><span class="ot"> for=</span><span class="st">&quot;orderStatus&quot;</span><span class="kw">&gt;</span>Select order status:<span class="kw">&lt;/label&gt;</span></a>
+<a class="sourceLine" id="cb13-26" data-line-number="26">      <span class="kw">&lt;select</span><span class="ot"> name=</span><span class="st">&quot;orderStatus&quot;</span><span class="kw">&gt;</span></a>
+<a class="sourceLine" id="cb13-27" data-line-number="27">      <span class="kw">&lt;option</span><span class="ot"> value=</span><span class="st">&quot;&quot;</span><span class="ot"> selected=</span><span class="st">&quot;selected&quot;</span><span class="kw">&gt;</span>--Order status--<span class="kw">&lt;/option&gt;</span></a>
+<a class="sourceLine" id="cb13-28" data-line-number="28">      <span class="kw">&lt;option</span><span class="ot"> value=</span><span class="st">&quot;{{.ID}}_pending&quot;</span><span class="kw">&gt;</span>Pending<span class="kw">&lt;/option&gt;</span></a>
+<a class="sourceLine" id="cb13-29" data-line-number="29">      <span class="kw">&lt;option</span><span class="ot"> value=</span><span class="st">&quot;{{.ID}}_delayed&quot;</span><span class="kw">&gt;</span>Delayed<span class="kw">&lt;/option&gt;</span></a>
+<a class="sourceLine" id="cb13-30" data-line-number="30">      <span class="kw">&lt;option</span><span class="ot"> value=</span><span class="st">&quot;{{.ID}}_confirmed&quot;</span><span class="kw">&gt;</span>Confirmed<span class="kw">&lt;/option&gt;</span></a>
+<a class="sourceLine" id="cb13-31" data-line-number="31">      <span class="kw">&lt;option</span><span class="ot"> value=</span><span class="st">&quot;{{.ID}}_delivered&quot;</span><span class="kw">&gt;</span>Delivered<span class="kw">&lt;/option&gt;</span></a>
+<a class="sourceLine" id="cb13-32" data-line-number="32">      <span class="kw">&lt;/select&gt;</span></a>
+<a class="sourceLine" id="cb13-33" data-line-number="33">      <span class="kw">&lt;button</span><span class="ot"> type=</span><span class="st">&quot;submit&quot;</span><span class="kw">&gt;</span>Update<span class="kw">&lt;/button&gt;</span></a>
+<a class="sourceLine" id="cb13-34" data-line-number="34">      <span class="kw">&lt;/form&gt;</span></a>
+<a class="sourceLine" id="cb13-35" data-line-number="35">      <span class="kw">&lt;form</span><span class="ot"> action=</span><span class="st">&quot;/notifyCustomer&quot;</span><span class="ot"> method=</span><span class="st">&quot;post&quot;</span><span class="kw">&gt;</span></a>
+<a class="sourceLine" id="cb13-36" data-line-number="36">      <span class="kw">&lt;button</span><span class="ot"> type=</span><span class="st">&quot;submit&quot;</span><span class="ot"> name=</span><span class="st">&quot;sendMessageTo&quot;</span><span class="ot"> value=</span><span class="st">&quot;{{.ID}}&quot;</span><span class="kw">&gt;</span>Notify Customer<span class="kw">&lt;/button&gt;</span></a>
+<a class="sourceLine" id="cb13-37" data-line-number="37">      <span class="kw">&lt;/form&gt;</span></a>
+<a class="sourceLine" id="cb13-38" data-line-number="38">    <span class="kw">&lt;/td&gt;</span></a>
+<a class="sourceLine" id="cb13-39" data-line-number="39">  <span class="kw">&lt;/tr&gt;</span></a>
+<a class="sourceLine" id="cb13-40" data-line-number="40">  {{ end }}</a>
+<a class="sourceLine" id="cb13-41" data-line-number="41"><span class="kw">&lt;/tbody&gt;</span></a>
+<a class="sourceLine" id="cb13-42" data-line-number="42"><span class="kw">&lt;/table&gt;</span></a>
+<a class="sourceLine" id="cb13-43" data-line-number="43">{{ end }}</a></code></pre></div>
+<h3 id="writing-our-handlers">Writing our handlers</h3>
+<p>Now, we’ll write our <code>orderPage</code> and <code>orderNotify</code> handlers.</p>
+<p>To keep our code <a href="https://en.wikipedia.org/wiki/Don%27t_repeat_yourself">DRY</a>, we’ll write a helper function that does a few templating tasks for us. At the bottom of <code>main.go</code>, add the following code:</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode go"><code class="sourceCode go"><a class="sourceLine" id="cb14-1" data-line-number="1"><span class="co">// RenderDefaultTemplate ...</span></a>
+<a class="sourceLine" id="cb14-2" data-line-number="2"><span class="kw">func</span> RenderDefaultTemplate(w http.ResponseWriter, thisView <span class="dt">string</span>, data <span class="kw">interface</span>{}) {</a>
+<a class="sourceLine" id="cb14-3" data-line-number="3">    renderthis := []<span class="dt">string</span>{thisView, <span class="st">&quot;views/layouts/default.gohtml&quot;</span>}</a>
+<a class="sourceLine" id="cb14-4" data-line-number="4">    t, err := template.ParseFiles(renderthis...)</a>
+<a class="sourceLine" id="cb14-5" data-line-number="5">    <span class="kw">if</span> err != <span class="ot">nil</span> {</a>
+<a class="sourceLine" id="cb14-6" data-line-number="6">        log.Fatal(err)</a>
+<a class="sourceLine" id="cb14-7" data-line-number="7">    }</a>
+<a class="sourceLine" id="cb14-8" data-line-number="8">    err = t.ExecuteTemplate(w, <span class="st">&quot;default&quot;</span>, data)</a>
+<a class="sourceLine" id="cb14-9" data-line-number="9">    <span class="kw">if</span> err != <span class="ot">nil</span> {</a>
+<a class="sourceLine" id="cb14-10" data-line-number="10">        log.Fatal(err)</a>
+<a class="sourceLine" id="cb14-11" data-line-number="11">    }</a>
+<a class="sourceLine" id="cb14-12" data-line-number="12">}</a></code></pre></div>
+<h4 id="orderpage-handler"><code>orderPage</code> handler</h4>
+<p>Add the following code just above <code>main()</code> in <code>main.go</code>:</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode go"><code class="sourceCode go"><a class="sourceLine" id="cb15-1" data-line-number="1"><span class="kw">func</span> orderPage(w http.ResponseWriter, r *http.Request){</a>
+<a class="sourceLine" id="cb15-2" data-line-number="2">    RenderDefaultTemplate(w, <span class="st">&quot;views/orders.gohtml&quot;</span>, CurrentOrders)</a>
+<a class="sourceLine" id="cb15-3" data-line-number="3">}</a></code></pre></div>
+<p>This renders and executes our <code>orders.gohtml</code> and <code>default.gohtml</code> templates, and passes the <code>CurrentOrders</code> object to the resulting view.</p>
+<p>To add the ability to update our orders, we have to check for a “POST” request submitted to the this (<code>&quot;/&quot;</code>) route. Rewrite <code>orderPage()</code> so that it looks like this:</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode go"><code class="sourceCode go"><a class="sourceLine" id="cb16-1" data-line-number="1"><span class="kw">func</span> orderPage(w http.ResponseWriter, r *http.Request) {</a>
+<a class="sourceLine" id="cb16-2" data-line-number="2">    <span class="kw">if</span> r.Method == <span class="st">&quot;POST&quot;</span> {</a>
+<a class="sourceLine" id="cb16-3" data-line-number="3">        r.ParseForm()</a>
+<a class="sourceLine" id="cb16-4" data-line-number="4">        <span class="kw">if</span> <span class="bu">len</span>(r.Form) == <span class="dv">0</span> {</a>
+<a class="sourceLine" id="cb16-5" data-line-number="5">            log.Println(<span class="st">&quot;Empty form.&quot;</span>)</a>
+<a class="sourceLine" id="cb16-6" data-line-number="6">        }</a>
+<a class="sourceLine" id="cb16-7" data-line-number="7">        s := strings.Split(r.FormValue(<span class="st">&quot;orderStatus&quot;</span>), <span class="st">&quot;_&quot;</span>)</a>
+<a class="sourceLine" id="cb16-8" data-line-number="8">        <span class="kw">for</span> i, v := <span class="kw">range</span> CurrentOrders {</a>
+<a class="sourceLine" id="cb16-9" data-line-number="9">            <span class="kw">if</span> v.ID == s[<span class="dv">0</span>] {</a>
+<a class="sourceLine" id="cb16-10" data-line-number="10">                CurrentOrders[i].Status = s[<span class="dv">1</span>]</a>
+<a class="sourceLine" id="cb16-11" data-line-number="11">            }</a>
+<a class="sourceLine" id="cb16-12" data-line-number="12">        }</a>
+<a class="sourceLine" id="cb16-13" data-line-number="13">    }</a>
+<a class="sourceLine" id="cb16-14" data-line-number="14">    RenderDefaultTemplate(w, <span class="st">&quot;views/orders.gohtml&quot;</span>, CurrentOrders)</a>
+<a class="sourceLine" id="cb16-15" data-line-number="15">}</a></code></pre></div>
+<p>Here, we parse the submitted form for values if we detect that a “POST” method is sent to the <code>orderPage</code> handler. This gives us the “ID” of the order being updated, and the resulting “Status” the order should have.</p>
+<p>We match our form’s order ID to its corresponding order “ID” in the <code>CurrentOrders</code> list, and update the “Status” field for that order “ID”. Once that’s done, the handler continues to call <code>RenderDefaultTemplate()</code>, rendering the updated information.</p>
+<h4 id="ordernotify-handler"><code>orderNotify</code> handler</h4>
+<p>In our <code>orderNotify</code> handler, we need to:</p>
+<ol type="1">
+<li>Get the order “ID” that we want to send a notification for.</li>
+<li>Get the order “Status”.</li>
+<li>Get the phone number of the customer for that order “ID”.</li>
+<li>Send a message to that phone number.</li>
+</ol>
+<p>Under our <code>orderPage()</code> handler, add the following code:</p>
+<div class="sourceCode" id="cb17"><pre class="sourceCode go"><code class="sourceCode go"><a class="sourceLine" id="cb17-1" data-line-number="1"><span class="kw">func</span> orderNotify(w http.ResponseWriter, r *http.Request){</a>
+<a class="sourceLine" id="cb17-2" data-line-number="2">    err := r.ParseForm()</a>
+<a class="sourceLine" id="cb17-3" data-line-number="3">    <span class="kw">if</span> err != <span class="ot">nil</span> {</a>
+<a class="sourceLine" id="cb17-4" data-line-number="4">        log.Println(err)</a>
+<a class="sourceLine" id="cb17-5" data-line-number="5">    }</a>
+<a class="sourceLine" id="cb17-6" data-line-number="6">    s := r.FormValue(<span class="st">&quot;sendMessageTo&quot;</span>)</a>
+<a class="sourceLine" id="cb17-7" data-line-number="7"></a>
+<a class="sourceLine" id="cb17-8" data-line-number="8">    <span class="kw">for</span> _, v := <span class="kw">range</span> CurrentOrders {</a>
+<a class="sourceLine" id="cb17-9" data-line-number="9">        <span class="kw">if</span> v.ID == s {</a>
+<a class="sourceLine" id="cb17-10" data-line-number="10">            msgToSend := isOrderConfirmed(v.Status, v.Name)</a>
+<a class="sourceLine" id="cb17-11" data-line-number="11">            _, err := Client.NewMessage(<span class="st">&quot;NomNom&quot;</span>, []<span class="dt">string</span>{v.Phone}, msgToSend, <span class="ot">nil</span>)</a>
+<a class="sourceLine" id="cb17-12" data-line-number="12">            <span class="kw">if</span> err != <span class="ot">nil</span> {</a>
+<a class="sourceLine" id="cb17-13" data-line-number="13">                log.Println(err)</a>
+<a class="sourceLine" id="cb17-14" data-line-number="14">            }</a>
+<a class="sourceLine" id="cb17-15" data-line-number="15">        }</a>
+<a class="sourceLine" id="cb17-16" data-line-number="16">    }</a>
+<a class="sourceLine" id="cb17-17" data-line-number="17">    RenderDefaultTemplate(w, <span class="st">&quot;views/orders.gohtml&quot;</span>, CurrentOrders)</a>
+<a class="sourceLine" id="cb17-18" data-line-number="18">}</a></code></pre></div>
+<p>So, here we parse our form for the “sendMessageTo” field that contains the order “ID” we need to send a notification for. Then we iterate through our <code>CurrentOrders</code> object, and find the order that matches the “ID” sent through our form. Once we’ve found the relevant order, we can use its fields to construct a message to send to our customer.</p>
+<p>Notice that we’re calling a <code>isOrderConfirmed()</code> helper function to construct our <code>msgToSend</code> parameter. Add the code for <code>isOrderConfirmed()</code> just under the body of <code>orderNotify()</code>:</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode go"><code class="sourceCode go"><a class="sourceLine" id="cb18-1" data-line-number="1"><span class="kw">func</span> isOrderConfirmed(orderStatus <span class="dt">string</span>, recipientName <span class="dt">string</span>) <span class="dt">string</span> {</a>
+<a class="sourceLine" id="cb18-2" data-line-number="2">    <span class="kw">switch</span> orderStatus {</a>
+<a class="sourceLine" id="cb18-3" data-line-number="3">    <span class="kw">case</span> <span class="st">&quot;pending&quot;</span>:</a>
+<a class="sourceLine" id="cb18-4" data-line-number="4">        <span class="kw">return</span> <span class="st">&quot;Hello, &quot;</span> + recipientName + <span class="st">&quot;, thanks for ordering at OmNomNom Foods! We&#39;re still working on your order. Please be patient with us!&quot;</span></a>
+<a class="sourceLine" id="cb18-5" data-line-number="5">    <span class="kw">case</span> <span class="st">&quot;confirmed&quot;</span>:</a>
+<a class="sourceLine" id="cb18-6" data-line-number="6">        <span class="kw">return</span> <span class="st">&quot;Hello, &quot;</span> + recipientName + <span class="st">&quot;, thanks for ordering at OmNomNom Foods! We are now preparing your food with love and fresh ingredients and will keep you updated.&quot;</span></a>
+<a class="sourceLine" id="cb18-7" data-line-number="7">    <span class="kw">case</span> <span class="st">&quot;delayed&quot;</span>:</a>
+<a class="sourceLine" id="cb18-8" data-line-number="8">        <span class="kw">return</span> <span class="st">&quot;Hello, &quot;</span> + recipientName + <span class="st">&quot;, sometimes good things take time! Unfortunately your order is slightly delayed but will be delivered as soon as possible.&quot;</span></a>
+<a class="sourceLine" id="cb18-9" data-line-number="9">    <span class="kw">case</span> <span class="st">&quot;delivered&quot;</span>:</a>
+<a class="sourceLine" id="cb18-10" data-line-number="10">        <span class="kw">return</span> <span class="st">&quot;Hello, &quot;</span> + recipientName + <span class="st">&quot;, you can start setting the table! Our driver is on their way with your order! Bon appetit!&quot;</span></a>
+<a class="sourceLine" id="cb18-11" data-line-number="11">    <span class="kw">default</span>:</a>
+<a class="sourceLine" id="cb18-12" data-line-number="12">        <span class="kw">return</span> <span class="st">&quot;We can&#39;t find your order! Please call our customer support for assistance.&quot;</span></a>
+<a class="sourceLine" id="cb18-13" data-line-number="13">    }</a>
+<a class="sourceLine" id="cb18-14" data-line-number="14">}</a></code></pre></div>
+<p>Our <code>isOrderConfirmed()</code> helper matches the status of the order to a list of predefined messages, and returns a message string (complete with the customer’s name). We assign this to the <code>msgToSend</code> variable for use when triggering the SMS notification.</p>
+<p>Finally, we trigger an SMS notification by sending a <code>NewMessage</code> request to the MessageBird servers with the following line in <code>orderNotify()</code>:</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode go"><code class="sourceCode go"><a class="sourceLine" id="cb19-1" data-line-number="1">_, err := Client.NewMessage(<span class="st">&quot;NomNom&quot;</span>, []<span class="dt">string</span>{v.Phone}, msgToSend, <span class="ot">nil</span>)</a></code></pre></div>
+<h2 id="testing-the-application">Testing the Application</h2>
+<p>We now have a fully working application, but we won’t be able to test our application because it’s still using dummy data taken from our <code>CurrentOrders</code> object. Plus, if you’re using a test API key, our code in <code>main.go</code> doesn’t give us visible feedback for each <code>NewMessage()</code> call.</p>
+<p>To set up a development copy of the code to test if our implementation of <code>NewMessage()</code> works, we can modify a few things:</p>
+<ol type="1">
+<li>Change the “Phone” fields in your <code>CurrentOrders</code> object to a test phone number that can receive messages. This phone number should also be saved in your MessageBird account as a contact.</li>
+<li>Modify our <code>NewMessage()</code> call in <code>orderNotify()</code> so that we log the message object returned:</li>
+</ol>
+<div class="sourceCode" id="cb20"><pre class="sourceCode go"><code class="sourceCode go"><a class="sourceLine" id="cb20-1" data-line-number="1">msg, err := Client.NewMessage(<span class="st">&quot;NomNom&quot;</span>, []<span class="dt">string</span>{v.Phone}, msgToSend, <span class="ot">nil</span>)</a>
+<a class="sourceLine" id="cb20-2" data-line-number="2">    <span class="kw">if</span> err != <span class="ot">nil</span> {</a>
+<a class="sourceLine" id="cb20-3" data-line-number="3">        log.Println(err)</a>
+<a class="sourceLine" id="cb20-4" data-line-number="4">    } <span class="kw">else</span> {</a>
+<a class="sourceLine" id="cb20-5" data-line-number="5">        log.Println(msg)</a>
+<a class="sourceLine" id="cb20-6" data-line-number="6">    }</a></code></pre></div>
+<p>Now, a successful <code>NewMessage()</code> call would log a message object that looks like the following:</p>
+<pre><code>&amp;{ae554eccfa9047d9aa7cbe261f65d80b https://rest.messagebird.com/messages/ae554eccfa9047d9aa7cbe261f65d80b mt sms NomNom Hello, Don Cheetos,thanks for ordering at OmNomNom Foods! We are now preparing your food with love and fresh ingredients and will keep you updated.  &lt;nil&gt; 10 map[] plain 1  &lt;nil&gt; +0000 +0000 {1 1 0 0 [{6596963426 sent 2018-08-19 17:58:20 +0000 +0000}]} []}</code></pre>
+<p>Now your can begin testing your application!</p>
+<p>Run your application in the terminal:</p>
+<div class="sourceCode" id="cb22"><pre class="sourceCode bash"><code class="sourceCode bash"><a class="sourceLine" id="cb22-1" data-line-number="1"><span class="ex">go</span> run main.go</a></code></pre></div>
+<ol type="1">
+<li>Point your browser at http://localhost:8080/ to see the table of orders.</li>
+<li>For any order displayed, select a new order status and click “Update” to update the order status. The page should display the updated order status.</li>
+<li>For any order displayed, click on “Send Notification” to send an SMS notification to the customer. You should see a message object logged in the terminal each time you send a message.</li>
+</ol>
+<h2 id="nice-work">Nice work!</h2>
+<p>You now have a running SMS Notifications application!</p>
+<p>You can now use the flow, code snippets and UI examples from this tutorial as an inspiration to build your own SMS Notifications system. Don’t forget to download the code from the <a href="https://github.com/messagebirdguides/notifications-guide">MessageBird Developer Guides GitHub repository</a>.</p>
+<h2 id="next-steps">Next steps</h2>
+<p>Want to build something similar but not quite sure how to get started? Please feel free to let us know at support@messagebird.com, we’d love to help!</p>
