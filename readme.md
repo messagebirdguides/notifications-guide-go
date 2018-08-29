@@ -58,6 +58,11 @@ following subfolders:
 - `net/http`: A HTTP package for building our routes and a simple http server.
 - `html/template`: A HTML template library for building views.
 
+From the MessageBird Go REST API package, we'll import the following packages:
+
+- `github.com/messagebird/go-rest-api`: The MessageBird core client package.
+- `github.com/messagebird/go-rest-api/sms`: The MessageBird SMS messaging package.
+
 ### Create your API Key 🔑
 
 To start making API calls, we need to generate an access key. MessageBird provides keys in _live_ and _test_ modes. For this tutorial you will need to use a live key. Otherwise, you will not be able to test the complete flow. Read more about the difference between test and live API keys [here](https://support.messagebird.com/hc/en-us/articles/360000670709-What-is-the-difference-between-a-live-key-and-a-test-key-).
@@ -124,7 +129,7 @@ import (
 var Client *messagebird.Client
 
 func main(){
-  Client = messagebird.New(<enter-your-apikey>)
+  Client = messagebird.New("<enter-your-api-key>")
 }
 ````
 
@@ -183,7 +188,7 @@ Modify `main.go` to look like the following:
 ````go
 func main() {
     initDB()
-    Client = messagebird.NewV2(<enter-your-api-key>)
+    Client = messagebird.New("<enter-your-api-key>")
 
     // Routes
     http.HandleFunc("/", orderPage)
@@ -421,6 +426,20 @@ In our `orderNotify` handler, we need to:
 3. Get the phone number of the customer for that order "ID".
 4. Send a message to that phone number.
 
+First, we'll need to add the MessageBird `sms` package to our `import` statement:
+
+````go
+import (
+  "html/template"
+  "log"
+  "net/http"
+  "strings"
+
+  "github.com/messagebird/go-rest-api"
+  "github.com/messagebird/go-rest-api/sms"
+)
+````
+
 Under our `orderPage()` handler, add the following code:
 
 ````go
@@ -434,7 +453,7 @@ func orderNotify(w http.ResponseWriter, r *http.Request){
     for _, v := range CurrentOrders {
         if v.ID == s {
             msgToSend := isOrderConfirmed(v.Status, v.Name)
-            _, err := Client.NewMessage("NomNom", []string{v.Phone}, msgToSend, nil)
+            _, err := sms.Create(Client, "NomNom", []string{v.Phone}, msgToSend, nil)
             if err != nil {
                 log.Println(err)
             }
@@ -467,23 +486,23 @@ func isOrderConfirmed(orderStatus string, recipientName string) string {
 
 Our `isOrderConfirmed()` helper matches the status of the order to a list of predefined messages, and returns a message string (complete with the customer's name). We assign this to the `msgToSend` variable for use when triggering the SMS notification.
 
-Finally, we trigger an SMS notification by sending a `NewMessage` request to the MessageBird servers with the following line in `orderNotify()`:
+Finally, we trigger an SMS notification by making a `sms.Create()` call to the MessageBird servers with the following line in `orderNotify()`:
 
 ````go
-_, err := Client.NewMessage("NomNom", []string{v.Phone}, msgToSend, nil)
+_, err := sms.Create(Client, "NomNom", []string{v.Phone}, msgToSend, nil)
 ````
 
 ## Testing the Application
 
-We now have a fully working application, but we won't be able to test our application because it's still using dummy data taken from our `CurrentOrders` object. Plus, if you're using a test API key, our code in `main.go` doesn't give us visible feedback for each `NewMessage()` call.
+We now have a fully working application, but we won't be able to test our application because it's still using dummy data taken from our `CurrentOrders` object. Plus, if you're using a test API key, our code in `main.go` doesn't give us visible feedback for each `sms.Create()` call.
 
-To set up a development copy of the code to test if our implementation of `NewMessage()` works, we can modify a few things:
+To set up a development copy of the code to test if our implementation of `sms.Create()` works, we can modify a few things:
 
 1. Change the "Phone" fields in your `CurrentOrders` object to a test phone number that can receive messages. This phone number should also be saved in your MessageBird account as a contact.
-2. Modify our `NewMessage()` call in `orderNotify()` so that we log the message object returned:
+2. Modify our `sms.Create()` call in `orderNotify()` so that we log the message object returned:
 
 ````go
-msg, err := Client.NewMessage("NomNom", []string{v.Phone}, msgToSend, nil)
+msg, err := sms.Create(Client, "NomNom", []string{v.Phone}, msgToSend, nil)
     if err != nil {
         log.Println(err)
     } else {
@@ -491,7 +510,7 @@ msg, err := Client.NewMessage("NomNom", []string{v.Phone}, msgToSend, nil)
     }
 ````
 
-Now, a successful `NewMessage()` call would log a message object that looks like the following:
+Now, a successful `sms.Create()` call would log a message object that looks like the following:
 
 ````
 &{ae554eccfa9047d9aa7cbe261f65d80b https://rest.messagebird.com/messages/ae554eccfa9047d9aa7cbe261f65d80b mt sms NomNom Hello, Don Cheetos,thanks for ordering at OmNomNom Foods! We are now preparing your food with love and fresh ingredients and will keep you updated.  <nil> 10 map[] plain 1  <nil> +0000 +0000 {1 1 0 0 [{6596963426 sent 2018-08-19 17:58:20 +0000 +0000}]} []}

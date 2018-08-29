@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/messagebird/go-rest-api"
+	"github.com/messagebird/go-rest-api/sms"
 )
 
 var (
@@ -18,7 +19,7 @@ var (
 
 func main() {
 	initDB()
-	Client = messagebird.NewV2("")
+	Client = messagebird.New("<enter-your-api-key>")
 
 	// Routes
 	http.HandleFunc("/", orderPage)
@@ -83,7 +84,7 @@ func orderNotify(w http.ResponseWriter, r *http.Request) {
 	for _, v := range CurrentOrders {
 		if v.ID == s {
 			msgToSend := isOrderConfirmed(v.Status, v.Name)
-			msg, err := Client.NewMessage("NomNom", []string{v.Phone}, msgToSend, nil)
+			msg, err := sms.Create(Client, "NomNom", []string{v.Phone}, msgToSend, nil)
 			if err != nil {
 				log.Println(err)
 			} else {
